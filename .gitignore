@@ -1,0 +1,14 @@
+HELP.md
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+useful.info
+logs/usage.log
+logs/users-ws.log
+.DS_Store
+.DS_Store\*
+
+.mvn/
+mvnw
+mvnw.cmd

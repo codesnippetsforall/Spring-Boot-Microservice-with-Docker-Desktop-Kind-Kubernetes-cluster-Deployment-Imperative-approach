@@ -21,9 +21,8 @@ This README is the project home. The full cluster lab (imperative commands, metr
 9. [How traffic reaches a pod](#how-traffic-reaches-a-pod)
 10. [Day-2 operations](#day-2-operations)
 11. [Metrics, CPU, and resources](#metrics-cpu-and-resources)
-12. [Declarative YAML](#declarative-yaml)
-13. [Troubleshooting](#troubleshooting)
-14. [Related documents](#related-documents)
+12. [Troubleshooting](#troubleshooting)
+13. [Related documents](#related-documents)
 
 ---
 
@@ -86,12 +85,6 @@ UserMicroservice/
 ├── Useful.info                      # personal kubectl/docker notes
 ├── DOCKER_KUBERNETES_GUIDE.md       # full cluster lab
 ├── README.md                        # this file
-├── kubernetes/
-│   ├── users-pod.yaml
-│   ├── users-deployment.yaml
-│   ├── users-service.yaml
-│   ├── users-config.yaml
-│   └── users-mysql-secret.yaml
 └── src/main/java/com/appsdeveloperblog/api/users/
     ├── UsersApplication.java
     ├── ui/controllers/UsersController.java
@@ -425,21 +418,6 @@ Then redeploy the app. Docker Desktop’s **built-in** Kubernetes stays one node
 
 ---
 
-## Declarative YAML
-
-Manifests under [`kubernetes/`](kubernetes/) use different names (`users-deployment`, `users-service`, demo image). Use **either** the imperative lab **or** these files, not both on port 8082.
-
-```powershell
-kubectl apply -f kubernetes/users-config.yaml
-kubectl apply -f kubernetes/users-mysql-secret.yaml
-kubectl apply -f kubernetes/users-deployment.yaml
-kubectl apply -f kubernetes/users-service.yaml
-```
-
-The sample Secret is for local learning only.
-
----
-
 ## Troubleshooting
 
 | Symptom | Check |
@@ -463,8 +441,6 @@ Full list: [DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md) section 16.
 | File | What it is |
 |---|---|
 | **[DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md)** | Complete Docker Desktop / kind lab: cluster setup, deploy, Service, rollouts, env, metrics-server, CPU, two nodes, command index |
-| [`Useful.info`](Useful.info) | Numbered personal cheat-sheet of the same commands |
-| [`kubernetes/`](kubernetes/) | Optional declarative manifests |
 | [`Dockerfile`](Dockerfile) | Image build |
 
 ### Guide map ([DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md))
@@ -476,5 +452,5 @@ Full list: [DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md) section 16.
 | 8 | Load balancing, keep-alive, port-forward |
 | 9–11 | New image, env, annotate, undo, scale, logs |
 | 12 | crictl vs Metrics Server, CPU request/limit |
-| 13–15 | api-versions, two kind nodes, YAML alternative |
+| 13–14 | api-versions, two kind nodes |
 | 16–18 | Troubleshooting, command index, mental model |
