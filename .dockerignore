@@ -1,0 +1,9 @@
+.git
+.idea
+.mvn
+logs
+postman
+*.md
+.DS_Store
+src/test
+target/*.original

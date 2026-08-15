@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: users-pod
+  labels:
+    app: users-ws
+    tier: backend
+spec:
+  containers:
+    - name: users-ws-container
+      image: manokaran/users-ws-public-demo:1.0.0
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 8082

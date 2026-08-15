@@ -1,0 +1,454 @@
+{
+	"info": {
+		"_postman_id": "a7c3e8d1-4b2f-4e9a-9c11-users-ms-001",
+		"name": "Users Microservice",
+		"description": "API tests for the Users microservice (`server.port=8082`).\n\n**Suggested order**\n1. Create User (public) — saves `userId` and a unique `email`\n2. Login (public) — saves JWT `token` and `userId` from response headers\n3. Get User by ID / List Users (require `Authorization: Bearer <token>`)\n\nProtected routes send the collection `token` variable as a Bearer token.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8082"
+		},
+		{
+			"key": "email",
+			"value": "john.doe@example.com"
+		},
+		{
+			"key": "password",
+			"value": "Password1"
+		},
+		{
+			"key": "firstName",
+			"value": "John"
+		},
+		{
+			"key": "lastName",
+			"value": "Doe"
+		},
+		{
+			"key": "token",
+			"value": ""
+		},
+		{
+			"key": "userId",
+			"value": ""
+		},
+		{
+			"key": "page",
+			"value": "1"
+		},
+		{
+			"key": "limit",
+			"value": "2"
+		}
+	],
+	"item": [
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "Create User",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set(\"email\", `john.doe.${Date.now()}@example.com`);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"",
+									"pm.test(\"Response has userId, names, and email\", function () {",
+									"    pm.expect(json.userId).to.be.a(\"string\").and.not.empty;",
+									"    pm.expect(json.firstName).to.eql(pm.collectionVariables.get(\"firstName\"));",
+									"    pm.expect(json.lastName).to.eql(pm.collectionVariables.get(\"lastName\"));",
+									"    pm.expect(json.email).to.eql(pm.collectionVariables.get(\"email\"));",
+									"});",
+									"",
+									"if (json.userId) {",
+									"    pm.collectionVariables.set(\"userId\", json.userId);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"firstName\": \"{{firstName}}\",\n    \"lastName\": \"{{lastName}}\",\n    \"email\": \"{{email}}\",\n    \"password\": \"{{password}}\",\n    \"repeatPassword\": \"{{password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users"
+							]
+						},
+						"description": "Public endpoint. Creates a user and returns `userId`, `firstName`, `lastName`, and `email`.\n\nValidation: first/last name min 2 chars; password and repeatPassword 8–16 chars; email must be valid.\n\nA unique email is generated on each run so you can re-run this request against an existing database."
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const authHeader = pm.response.headers.get(\"Authorization\");",
+									"pm.test(\"Authorization header contains Bearer token\", function () {",
+									"    pm.expect(authHeader).to.exist;",
+									"    pm.expect(authHeader).to.match(/^Bearer\\s+.+/i);",
+									"});",
+									"",
+									"if (authHeader) {",
+									"    pm.collectionVariables.set(\"token\", authHeader.replace(/^Bearer\\s+/i, \"\").trim());",
+									"}",
+									"",
+									"const userIdHeader = pm.response.headers.get(\"UserID\");",
+									"pm.test(\"UserID header is present\", function () {",
+									"    pm.expect(userIdHeader).to.exist.and.not.empty;",
+									"});",
+									"",
+									"if (userIdHeader) {",
+									"    pm.collectionVariables.set(\"userId\", userIdHeader);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{email}}\",\n    \"password\": \"{{password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"login"
+							]
+						},
+						"description": "Public login via Spring Security filter (`/users/login`). Body fields are `email` and `password`.\n\nOn success the response includes:\n- `Authorization`: `Bearer <jwt>`\n- `UserID`: public user id\n\nTests copy both into collection variables for later requests."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User by ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test(\"Returned user matches saved userId\", function () {",
+									"    pm.expect(json.userId).to.eql(pm.collectionVariables.get(\"userId\"));",
+									"    pm.expect(json.email).to.eql(pm.collectionVariables.get(\"email\"));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}"
+							]
+						},
+						"description": "Requires JWT. Uses `userId` saved from Create User or Login."
+					},
+					"response": []
+				},
+				{
+					"name": "List Users",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"const json = pm.response.json();",
+									"pm.test(\"Response is an array\", function () {",
+									"    pm.expect(json).to.be.an(\"array\");",
+									"});",
+									"",
+									"pm.test(\"Page size does not exceed limit\", function () {",
+									"    const limit = parseInt(pm.collectionVariables.get(\"limit\"), 10);",
+									"    pm.expect(json.length).to.be.at.most(limit);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users?page={{page}}&limit={{limit}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "{{page}}",
+									"description": "1-based in the service when page > 0 (page 1 is the first page). Default is 0."
+								},
+								{
+									"key": "limit",
+									"value": "{{limit}}",
+									"description": "Page size. Default is 2."
+								}
+							]
+						},
+						"description": "Requires JWT. Query params: `page` (default 0) and `limit` (default 2). When `page` is greater than 0 the service treats it as 1-based (page 1 = first page)."
+					},
+					"response": []
+				},
+				{
+					"name": "Create User - Duplicate Email",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Duplicate email is rejected\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([400, 409, 500]);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"firstName\": \"{{firstName}}\",\n    \"lastName\": \"{{lastName}}\",\n    \"email\": \"{{email}}\",\n    \"password\": \"{{password}}\",\n    \"repeatPassword\": \"{{password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/users",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users"
+							]
+						},
+						"description": "Reuses the email from the last Create User run. Expect a failure (`Record already exists`)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User by ID - No Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Unauthenticated request is rejected\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([401, 403]);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/users/{{userId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"users",
+								"{{userId}}"
+							]
+						},
+						"description": "Same as Get User by ID but without a Bearer token. Expect 401 or 403."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Actuator",
+			"item": [
+				{
+					"name": "Health",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Application is UP\", function () {",
+									"    pm.expect(pm.response.json().status).to.eql(\"UP\");",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/actuator/health",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"actuator",
+								"health"
+							]
+						},
+						"description": "Public health check permitted in WebSecurity."
+					},
+					"response": []
+				},
+				{
+					"name": "Info",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/actuator/info",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"actuator",
+								"info"
+							]
+						},
+						"description": "Public actuator info endpoint permitted in WebSecurity."
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

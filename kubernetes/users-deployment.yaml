@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users-deployment
+  labels:
+    app: users-ws
+    tier: backend
+  annotations:
+    kubernetes.io/change-cause: "Updated docker image to version 1.0.2(Secret as Volume Mounts) and enabled configtree"
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: users-ws
+  template:
+    metadata:
+      labels:
+        app: users-ws
+    spec:
+      containers:
+        - name: users-ws-container
+          image: manokaran/users-ws-public-demo:1.0.2
+          ports:
+            - containerPort: 8082
+          envFrom:
+            - configMapRef:
+                name: users-config
+#            - secretRef:
+#                name: users-mysql-secret
+          volumeMounts:
+            - mountPath: /opt/secrets/db
+              name: db-secrets-volume
+      volumes:
+        - name: db-secrets-volume
+          secret:
+            secretName: users-mysql-secret
