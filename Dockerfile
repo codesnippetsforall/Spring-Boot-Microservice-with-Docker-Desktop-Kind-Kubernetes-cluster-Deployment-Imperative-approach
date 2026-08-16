@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=amazoncorretto:21-alpine-jdk
+ARG BASE_IMAGE=eclipse-temurin:21-jre-alpine
 FROM ${BASE_IMAGE}
 
 WORKDIR /app

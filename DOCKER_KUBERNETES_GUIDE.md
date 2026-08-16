@@ -237,13 +237,15 @@ If only **one** IP is listed, the Service can only send traffic to that one pod.
 
 On Docker Desktop, LoadBalancer often maps to **`http://localhost:8082`**.
 
-Useful APIs (this app):
+Useful APIs (this app, no auth):
 
 | Method | Path |
 |---|---|
+| POST | `/users` |
 | GET | `/users` |
 | GET | `/users/{userId}` |
-| POST | `/users` |
+| PUT | `/users/{userId}` |
+| DELETE | `/users/{userId}` |
 
 The JSON field **`podName`** is filled from `HOSTNAME` (the pod name in Kubernetes). Use it to see which replica handled the call.
 
@@ -531,20 +533,70 @@ Then repeat sections 7–8 to deploy the app again. `kubectl get pods -o wide` m
 
 ---
 
-## 15. Declarative alternative (YAML in `kubernetes/`)
+## 15. Cleanup / destroy
 
-The same app can be applied from files (different names than the imperative lab):
+Do **not** delete the Service named `kubernetes` (`10.96.0.1`). That is the cluster API, not the Users app.
+
+### 15.1 Remove the app (cluster stays)
+
+Pods of `user-ms-deployment` go away with the Deployment. The node `desktop-control-plane` stays Ready.
 
 ```powershell
-kubectl apply -f kubernetes/users-config.yaml
-kubectl apply -f kubernetes/users-mysql-secret.yaml
-kubectl apply -f kubernetes/users-deployment.yaml
-kubectl apply -f kubernetes/users-service.yaml
+kubectl get all
+
+kubectl delete service users-ms-service
+kubectl delete deployment user-ms-deployment
+
+kubectl get pods
+kubectl get svc
+kubectl get nodes
 ```
 
-Those manifests use Deployment `users-deployment`, Service `users-service`, and image `skargopolov/users-ws-public-demo`. Keep **one** style per lab (imperative `user-ms-deployment` **or** these YAML names) so you do not run two copies on port 8082.
+Optional: remove Metrics Server from this lab:
 
-Do not commit real database passwords. The sample Secret is for local learning only.
+```powershell
+kubectl delete -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+`kubectl scale ... --replicas=0` only stops pods; the Deployment object remains. `kubectl delete deployment` removes it.
+
+Deleting a **single pod** while the Deployment still exists makes Kubernetes create a replacement. To stop the app, delete (or scale) the Deployment.
+
+### 15.2 Destroy the kind cluster (node + control plane)
+
+The Docker container `desktop-control-plane` **is** the node and the control plane. `kubectl delete node` is not the way to tear down this lab.
+
+```powershell
+kind get clusters
+kind delete cluster --name desktop
+```
+
+That removes the node, all remaining pods (including `kube-system`), all Deployments and Services, and the kind cluster.
+
+Confirm:
+
+```powershell
+kind get clusters
+kubectl get nodes
+docker ps --format "{{.Names}}"
+```
+
+`desktop-control-plane` should be gone.
+
+One-shot (app then cluster):
+
+```powershell
+kubectl delete service users-ms-service
+kubectl delete deployment user-ms-deployment
+kind delete cluster --name desktop
+```
+
+You can skip the two `kubectl delete` lines; `kind delete cluster` wipes everything. Deleting the app first is useful if you want to watch pods terminate.
+
+| Action | What it does |
+|---|---|
+| Docker Desktop **Stop** on the cluster card | Cluster paused; objects still exist; start later |
+| `kind delete cluster --name desktop` | **Destroyed**; create again with `kind create cluster --name desktop` |
 
 ---
 
@@ -602,6 +654,16 @@ kubectl api-versions
 kubectl set resources deployment/user-ms-deployment -c=users-ws-k8s --requests=cpu=100m --limits=cpu=250m
 kubectl exec -it deploy/user-ms-deployment -- env
 kubectl port-forward pod/<pod-name> 8082:8082
+
+# Cleanup / destroy
+kubectl get all
+kubectl delete service users-ms-service
+kubectl delete deployment user-ms-deployment
+kubectl get pods
+kubectl get svc
+kubectl get nodes
+kubectl delete -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+kind delete cluster --name desktop
 ```
 
 ---
@@ -615,3 +677,4 @@ kubectl port-forward pod/<pod-name> 8082:8082
 5. **kube-proxy** forwards each **connection** to one endpoint.
 6. **Control plane** stores desired state; it does not sit in the HTTP path.
 7. On this laptop, control plane and worker are usually **the same node**.
+8. **Delete Deployment** removes that app’s pods. **Delete the kind cluster** to remove the node and control plane. Do not delete the `kubernetes` Service.

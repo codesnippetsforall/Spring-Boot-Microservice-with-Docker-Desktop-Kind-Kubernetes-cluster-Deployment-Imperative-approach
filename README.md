@@ -1,10 +1,8 @@
 # Users Microservice
 
-Spring Boot **Users** API (Java 21) with JWT security, packaged as a Docker image and deployed to a **local Kubernetes cluster** (Docker Desktop and/or kind).
+Spring Boot **Users** API (Java 21) with simple CRUD (no authentication), packaged as a container image and deployed to a **local Kubernetes cluster** (Docker Desktop **kind**, Docker Desktop **kubeadm**, or Podman + Quay).
 
-This README is the project home. The full cluster lab (imperative commands, metrics-server, CPU limits, load balancing, kind nodes) lives in:
-
-**[DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md)**
+This README is the project home. Numbered copy-paste commands live in the cheatsheets below. The longer cluster lab (metrics-server, CPU limits, load balancing, kind nodes) is in **[DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md)**.
 
 ---
 
@@ -18,11 +16,12 @@ This README is the project home. The full cluster lab (imperative commands, metr
 6. [API reference](#api-reference)
 7. [Build the Docker image](#build-the-docker-image)
 8. [Kubernetes on the local machine](#kubernetes-on-the-local-machine)
-9. [How traffic reaches a pod](#how-traffic-reaches-a-pod)
-10. [Day-2 operations](#day-2-operations)
-11. [Metrics, CPU, and resources](#metrics-cpu-and-resources)
-12. [Troubleshooting](#troubleshooting)
-13. [Related documents](#related-documents)
+9. [Command cheatsheets](#command-cheatsheets)
+10. [How traffic reaches a pod](#how-traffic-reaches-a-pod)
+11. [Day-2 operations](#day-2-operations)
+12. [Metrics, CPU, and resources](#metrics-cpu-and-resources)
+13. [Troubleshooting](#troubleshooting)
+14. [Related documents](#related-documents)
 
 ---
 
@@ -49,7 +48,9 @@ Client (Postman / curl)
 
 | Lab object | Name |
 |---|---|
-| Docker Hub image | `dockermano1984/users-ws-k8s` |
+| Docker Hub (kind) | `dockermano/users-ws-k8s` |
+| Docker Hub (kubeadm) | `dockermano/users-ws-kubeadm-k8s` |
+| Quay (Podman) | `quay.io/podmano/users-ws-k8s` |
 | Tags | `1.0.0`, `1.0.1`, `latest` |
 | Deployment | `user-ms-deployment` |
 | Container | `users-ws-k8s` |
@@ -67,11 +68,11 @@ Client (Postman / curl)
 | Framework | Spring Boot 3.5.4 |
 | API | Spring Web |
 | Persistence | Spring Data JPA, H2 (default/test), MySQL (`prod`) |
-| Security | Spring Security, JWT (`/users/login`) |
-| Mapping | ModelMapper |
+| Security | None (open CRUD for the lab) |
+| Mapping | ModelMapper, Lombok |
 | Observability | Spring Actuator (`/actuator/health`, `/actuator/info`) |
 | Container | Amazon Corretto 21 Alpine (`Dockerfile`) |
-| Orchestration | Kubernetes (Docker Desktop or kind) |
+| Orchestration | Kubernetes (Docker Desktop kind, Docker Desktop kubeadm, or Podman) |
 
 ---
 
@@ -82,7 +83,9 @@ UserMicroservice/
 ├── Dockerfile
 ├── pom.xml
 ├── environment.env
-├── Useful.info                      # personal kubectl/docker notes
+├── Docker_Kind_Kubernetes_Commands_Cheatsheet.info
+├── Docker_kubeadm_Kubernetes_Commands_Cheatsheet.info
+├── Podman_Kubernetes_Commands_Cheatsheet.info
 ├── DOCKER_KUBERNETES_GUIDE.md       # full cluster lab
 ├── README.md                        # this file
 └── src/main/java/com/appsdeveloperblog/api/users/
@@ -91,7 +94,7 @@ UserMicroservice/
     ├── ui/request/  ui/response/
     ├── service/UsersServiceImpl.java
     ├── io/UserEntity.java  UsersRepository.java
-    └── security/            # JWT filter chain
+    └── exceptions/
 ```
 
 ---
@@ -104,8 +107,9 @@ UserMicroservice/
 | Maven | `mvn -version` |
 | Docker Desktop (Windows) | `docker version` |
 | kubectl | `kubectl version --client` |
-| Docker Hub account | `docker login` |
-| kind (if you use a kind cluster) | `kind version` |
+| Docker Hub account | `docker login` (kind / kubeadm cheatsheets) |
+| kind (Docker Desktop kind cluster) | `kind version` (optional; cluster can be created in Docker Desktop UI) |
+| Podman + Quay (optional) | `podman version`, `podman login quay.io` |
 
 Give Docker **8 GB+** RAM. Each Users pod uses roughly **250–280 MB**.
 
@@ -150,47 +154,29 @@ Do not commit real DB passwords or JWT secrets. Keep them out of Git.
 
 Base URL locally or via the Service: `http://localhost:8082`
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/users` | none | Create user |
-| `POST` | `/users/login` | none | Login; JWT in `Authorization` |
-| `GET` | `/users` | Bearer JWT | List users (`page`, `limit`) |
-| `GET` | `/users/{userId}` | Bearer JWT | Get one user |
-| `GET` | `/actuator/health` | none | Health |
-| `GET` | `/actuator/info` | none | Info |
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/users` | Create user (`201`) |
+| `GET` | `/users` | List users (`page`, `limit`; default 0 / 20) |
+| `GET` | `/users/{userId}` | Get one user |
+| `PUT` | `/users/{userId}` | Update user |
+| `DELETE` | `/users/{userId}` | Delete user (`204`) |
+| `GET` | `/actuator/health` | Health |
+| `GET` | `/actuator/info` | Info |
 
-Create user:
+No authentication. Duplicate email returns `409`; missing user returns `404`.
+
+Create / update body:
 
 ```json
-POST /users
 {
   "firstName": "John",
   "lastName": "Doe",
-  "email": "john@example.com",
-  "password": "password1",
-  "repeatPassword": "password1"
+  "email": "john@example.com"
 }
 ```
 
-Constraints: first/last name min 2 chars; email valid; password 8–16 chars.
-
-Login:
-
-```json
-POST /users/login
-{
-  "email": "john@example.com",
-  "password": "password1"
-}
-```
-
-Response headers: `Authorization: Bearer <jwt>`, `UserID: <public-id>`.
-
-Send on later GETs:
-
-```text
-Authorization: Bearer <jwt>
-```
+Constraints: first/last name min 2 chars; email valid.
 
 Each user JSON includes **`podName`**:
 
@@ -205,25 +191,27 @@ That field is set from `System.getenv("HOSTNAME")` in `UsersController`.
 
 ```powershell
 mvn -DskipTests package
-docker build -t dockermano1984/users-ws-k8s:latest -t dockermano1984/users-ws-k8s:1.0.0 --build-arg IMAGE_VERSION=1.0.0 .
-docker push dockermano1984/users-ws-k8s:1.0.0
+docker build -t dockermano/users-ws-k8s:latest -t dockermano/users-ws-k8s:1.0.0 --build-arg IMAGE_VERSION=1.0.0 .
+docker push dockermano/users-ws-k8s:1.0.0
 ```
 
 The image copies `target/*.jar`, runs as `java -XX:MaxRAMPercentage=75.0 -jar app.jar`.
 
-Create the public Hub repo `dockermano1984/users-ws-k8s` first. Full image/tag/push notes: [DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md) sections 5–6.
+Create the public Hub repo `dockermano/users-ws-k8s` first. Full image/tag/push notes: [DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md) sections 5–6.
 
 ---
 
 ## Kubernetes on the local machine
 
-Step-by-step (enable cluster, kind vs Docker Desktop, expose, Postman, PowerShell patch pitfalls) is in **[DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md)**. Summary below.
+Pick a cheatsheet for the cluster you created, then follow its numbered steps. Narrative (kind vs kubeadm, expose, Postman, PowerShell patch pitfalls) is in **[DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md)**. Summary below.
 
 ### Enable a cluster
 
-**Docker Desktop:** Settings → Kubernetes → Enable → Apply. Node name is usually `docker-desktop`.
+**Docker Desktop kind:** Settings → Kubernetes → create/edit cluster → **kind**. Node is usually `desktop-control-plane` (cluster name **`desktop`**). Optional extra worker via the UI slider (resets the cluster).
 
-**kind:** this lab’s node `desktop-control-plane` means cluster name **`desktop`**.
+**Docker Desktop kubeadm:** Settings → Kubernetes → create/edit cluster → **kubeadm**. Node is usually `docker-desktop` (single node; no extra worker slider). Switching kind ↔ kubeadm **resets** the cluster.
+
+**kind CLI** (if installed): this lab’s node `desktop-control-plane` means cluster name **`desktop`**.
 
 ```powershell
 kind create cluster --name desktop
@@ -237,7 +225,7 @@ This laptop lab is **one node**: that node is **both** control plane (API server
 ### Deploy (imperative)
 
 ```powershell
-kubectl create deployment user-ms-deployment --image dockermano1984/users-ws-k8s:1.0.0 --port=8082 --replicas=3
+kubectl create deployment user-ms-deployment --image dockermano/users-ws-k8s:1.0.0 --port=8082 --replicas=3
 kubectl expose deployment user-ms-deployment --type=LoadBalancer --port=8082 --target-port=8082 --name users-ms-service
 kubectl get pods
 kubectl get svc
@@ -256,19 +244,33 @@ Match IPs to pods:
 kubectl get pods -l app=user-ms-deployment -o wide
 ```
 
-On Docker Desktop, try **`http://localhost:8082`**.
+On Docker Desktop kubeadm, try **`http://localhost:8082`**. On kind, localhost often fails — use `kubectl port-forward svc/users-ms-service 8082:8082`.
 
 ### New image rollout
 
 ```powershell
 mvn -DskipTests package
-docker build -t dockermano1984/users-ws-k8s:1.0.1 .
-docker push dockermano1984/users-ws-k8s:1.0.1
-kubectl set image deployment/user-ms-deployment users-ws-k8s=dockermano1984/users-ws-k8s:1.0.1
+docker build -t dockermano/users-ws-k8s:1.0.1 .
+docker push dockermano/users-ws-k8s:1.0.1
+kubectl set image deployment/user-ms-deployment users-ws-k8s=dockermano/users-ws-k8s:1.0.1
 kubectl rollout status deployment/user-ms-deployment
 ```
 
-`imagePullPolicy`: `Always` / `IfNotPresent` / `Never` — prefer a **new tag** over mutating `latest`.
+`imagePullPolicy`: `Always` / `IfNotPresent` / `Never` — prefer a **new tag** over mutating `latest`. For kubeadm / Podman, use the image name from that cheatsheet.
+
+---
+
+## Command cheatsheets
+
+Same lab flow (build → push → deploy → expose → rollout → env → scale → logs → metrics → cleanup). Use **one** file so image names and node names match your runtime.
+
+| File | Runtime | Image / registry | Cluster node |
+|---|---|---|---|
+| **[Docker_Kind_Kubernetes_Commands_Cheatsheet.info](Docker_Kind_Kubernetes_Commands_Cheatsheet.info)** | Docker Desktop **kind** | Docker Hub `dockermano/users-ws-k8s` | `desktop-control-plane` (+ optional worker). `crictl` via `docker exec desktop-control-plane` |
+| **[Docker_kubeadm_Kubernetes_Commands_Cheatsheet.info](Docker_kubeadm_Kubernetes_Commands_Cheatsheet.info)** | Docker Desktop **kubeadm** | Docker Hub `dockermano/users-ws-kubeadm-k8s` | `docker-desktop` only. No kind `crictl` container — use `docker stats` / `kubectl top` |
+| **[Podman_Kubernetes_Commands_Cheatsheet.info](Podman_Kubernetes_Commands_Cheatsheet.info)** | **Podman** + Kubernetes | Quay `quay.io/podmano/users-ws-k8s` | Do not run Podman Desktop and Docker Desktop together on this Windows box (WSL conflict) |
+
+`kubectl` app commands (`create deployment`, `expose`, `set image`, `rollout`, `scale`) are the same in all three. Differences are image build/push, node name, metrics (`crictl` vs `kubectl top`), and how you reset the cluster.
 
 ---
 
@@ -414,7 +416,7 @@ kind create cluster --name desktop --config kind-2nodes.yaml
 kubectl get nodes
 ```
 
-Then redeploy the app. Docker Desktop’s **built-in** Kubernetes stays one node.
+Then redeploy the app. Docker Desktop **kubeadm** stays one node (`docker-desktop`). Extra workers are a **kind** feature.
 
 ---
 
@@ -430,7 +432,6 @@ Then redeploy the app. Docker Desktop’s **built-in** Kubernetes stays one node
 | `Metrics API not available` | metrics-server Ready + TLS patch **file** |
 | `The request is invalid` on patch | PowerShell ate JSON quotes |
 | Cursor paste joins two lines | Paste one PowerShell line at a time |
-| GET `/users` → 403/401 | Send `Authorization: Bearer` after login |
 
 Full list: [DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md) section 16.
 
@@ -440,7 +441,10 @@ Full list: [DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md) section 16.
 
 | File | What it is |
 |---|---|
-| **[DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md)** | Complete Docker Desktop / kind lab: cluster setup, deploy, Service, rollouts, env, metrics-server, CPU, two nodes, command index |
+| **[Docker_Kind_Kubernetes_Commands_Cheatsheet.info](Docker_Kind_Kubernetes_Commands_Cheatsheet.info)** | Numbered commands: Docker Hub + Docker Desktop **kind** (`desktop-control-plane`, `crictl`) |
+| **[Docker_kubeadm_Kubernetes_Commands_Cheatsheet.info](Docker_kubeadm_Kubernetes_Commands_Cheatsheet.info)** | Numbered commands: Docker Hub + Docker Desktop **kubeadm** (`docker-desktop`, reset-cluster) |
+| **[Podman_Kubernetes_Commands_Cheatsheet.info](Podman_Kubernetes_Commands_Cheatsheet.info)** | Numbered commands: Quay.io + **Podman** (`quay.io/podmano/users-ws-k8s`) |
+| **[DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md)** | Longer Docker Desktop / kind lab: cluster setup, deploy, Service, rollouts, env, metrics-server, CPU, two nodes, cleanup, command index |
 | [`Dockerfile`](Dockerfile) | Image build |
 
 ### Guide map ([DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md))
@@ -453,4 +457,5 @@ Full list: [DOCKER_KUBERNETES_GUIDE.md](DOCKER_KUBERNETES_GUIDE.md) section 16.
 | 9–11 | New image, env, annotate, undo, scale, logs |
 | 12 | crictl vs Metrics Server, CPU request/limit |
 | 13–14 | api-versions, two kind nodes |
+| 15 | Cleanup / destroy (app, metrics-server, kind cluster) |
 | 16–18 | Troubleshooting, command index, mental model |

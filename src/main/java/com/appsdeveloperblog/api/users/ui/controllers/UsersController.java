@@ -5,53 +5,55 @@ import com.appsdeveloperblog.api.users.shared.UserDto;
 import com.appsdeveloperblog.api.users.ui.request.UserDetailsRequestModel;
 import com.appsdeveloperblog.api.users.ui.response.UserRest;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.modelmapper.TypeToken;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
-import java.lang.reflect.Type;
 import java.util.List;
 
 @RestController
 @RequestMapping("/users")
+@RequiredArgsConstructor
 public class UsersController {
 
     private final UsersService usersService;
-
-    @Autowired
-    public UsersController(UsersService usersService) {
-        this.usersService = usersService;
-    }
+    private final ModelMapper modelMapper;
 
     @PostMapping
-    public UserRest createUser(@RequestBody @Valid UserDetailsRequestModel userDetails) throws Exception {
-        ModelMapper modelMapper = new ModelMapper();
-        UserDto userDto = new ModelMapper().map(userDetails, UserDto.class);
-
-        UserDto createdUser = usersService.createUser(userDto);
-
-        return withPodName(modelMapper.map(createdUser, UserRest.class));
+    @ResponseStatus(HttpStatus.CREATED)
+    public UserRest createUser(@RequestBody @Valid UserDetailsRequestModel request) {
+        UserDto created = usersService.createUser(modelMapper.map(request, UserDto.class));
+        return withPodName(modelMapper.map(created, UserRest.class));
     }
 
     @GetMapping("/{userId}")
     public UserRest getUser(@PathVariable String userId) {
-        UserDto userDto = usersService.getUserById(userId); // Call the service layer method
-        return withPodName(new ModelMapper().map(userDto, UserRest.class)); // Map UserDto to UserRest
+        return withPodName(modelMapper.map(usersService.getUserById(userId), UserRest.class));
     }
 
-
     @GetMapping
-    public List<UserRest> getUsers(@RequestParam(value = "page", defaultValue = "0") int page,
-                                   @RequestParam(value = "limit", defaultValue = "2") int limit) {
-        List<UserDto> users = usersService.getUsers(page, limit);
+    public List<UserRest> getUsers(@RequestParam(defaultValue = "0") int page,
+                                   @RequestParam(defaultValue = "20") int limit) {
+        List<UserRest> users = modelMapper.map(
+                usersService.getUsers(page, limit),
+                new TypeToken<List<UserRest>>() {}.getType());
+        users.forEach(this::withPodName);
+        return users;
+    }
 
-        Type listType = new TypeToken<List<UserRest>>() {
-        }.getType();
+    @PutMapping("/{userId}")
+    public UserRest updateUser(@PathVariable String userId,
+                               @RequestBody @Valid UserDetailsRequestModel request) {
+        UserDto updated = usersService.updateUser(userId, modelMapper.map(request, UserDto.class));
+        return withPodName(modelMapper.map(updated, UserRest.class));
+    }
 
-        List<UserRest> returnValue = new ModelMapper().map(users, listType);
-        returnValue.forEach(this::withPodName);
-        return returnValue;
+    @DeleteMapping("/{userId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteUser(@PathVariable String userId) {
+        usersService.deleteUser(userId);
     }
 
     private UserRest withPodName(UserRest user) {

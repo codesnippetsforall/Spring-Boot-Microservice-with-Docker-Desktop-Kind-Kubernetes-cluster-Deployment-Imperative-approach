@@ -1,0 +1,231 @@
+Docker Desktop Kubernetes with kubeadm (single-node).
+Node name is usually docker-desktop (control plane + worker on the same node).
+There is no extra worker slider (unlike kind). Switching kind -> kubeadm resets the cluster.
+
+Prerequisites
+- Docker Desktop running
+- Kubernetes -> Create / Edit cluster -> choose kubeadm (not kind)
+- Wait until cluster is Running
+
+	kubectl config current-context
+	kubectl get nodes
+
+	Expect: docker-desktop   Ready   control-plane
+
+1. Create Public Repository in Docker Hub (website) -> dockermano/users-ws-kubeadm-k8s
+
+2. Open the application and run the below command to dockerize the application
+	
+	mvn -DskipTests package
+	
+	docker build -t dockermano/users-ws-kubeadm-k8s:latest -t dockermano/users-ws-kubeadm-k8s:1.0.0 --build-arg IMAGE_VERSION=1.0.0 .
+	
+	or 
+	
+	docker build -t dockermano/users-ws-kubeadm-k8s:latest --build-arg IMAGE_VERSION=1.0.0 .
+	
+	docker tag dockermano/users-ws-kubeadm-k8s:latest dockermano/users-ws-kubeadm-k8s:1.0.0
+	
+3. Push the docker image into Docker Hub
+
+	docker push dockermano/users-ws-kubeadm-k8s:1.0.0
+	
+4. Create Kubernetes DEPLOYMENT
+
+   kubectl create deployment user-ms-deployment --image dockermano/users-ws-kubeadm-k8s:1.0.0 --port=8082 --replicas=3
+
+   Note: All pods land on docker-desktop (single node). H2 is in-memory per pod; for create-then-get in Postman use --replicas=1.
+
+5. Check the Deployment status
+
+	kubectl get deployments
+	
+6. Check the PODs status
+
+	kubectl get pods
+	
+	kubectl get pods -o wide
+	
+	NODE column should show docker-desktop
+	
+7. View the deployment details (Replicas, Events, Image, Port, StrategyType, Container Specification etc., )
+
+	kubectl describe deployment user-ms-deployment
+	
+	or 
+	
+	kubectl describe deployment/user-ms-deployment
+	
+8. Expose the deployment for Service discovery (Types like ClusterIP, LoadBalancer, NodePort, Ingress, ExternalName)
+
+	kubectl expose deployment user-ms-deployment --type=LoadBalancer --port=8082 --target-port=8082 --name users-ms-service
+	
+9. Get Kubernetes Service status
+
+	kubectl get services
+	
+10. View Service details (Get the Pods endpoint i.e, IP addresses)
+
+	kubectl describe service users-ms-service
+	
+	kubectl get endpoints users-ms-service
+	
+11. View the Kubernetes setup in Docker Desktop & Test the application using Postman
+
+	http://localhost:8082/users
+	
+	If localhost:8082 fails:
+	
+	kubectl port-forward svc/users-ms-service 8082:8082
+	
+	POST /users  (JSON: firstName, lastName, email)
+	GET  /users
+	GET  /users/{userId}
+	PUT  /users/{userId}
+	DELETE /users/{userId}
+
+12. Make some changes in the Application to redeploy
+
+	mvn -DskipTests package
+	
+13. Rebuild the Docker with new TAG
+
+	docker build -t dockermano/users-ws-kubeadm-k8s:1.0.1 .
+	
+14. Push the revised Docker container into Docker Hub
+
+	docker push dockermano/users-ws-kubeadm-k8s:1.0.1
+	
+15. Update the Deployment with revised docker image (Deployment Name -> user-ms-deployment, Container Name -> users-ws-kubeadm-k8s)
+
+	kubectl set image deployment/user-ms-deployment users-ws-kubeadm-k8s=dockermano/users-ws-kubeadm-k8s:1.0.1
+	
+	Note: Old PODs get deleted and new PODs get Created
+	
+16. View the ROLLOUT history of the Deployment
+
+	kubectl rollout history deployment/user-ms-deployment
+	
+17. Add details about Deployment changes via ANNOTATE 
+
+	kubectl annotate deployment/user-ms-deployment kubernetes.io/change-cause="Updated docker image into dockermano/users-ws-kubeadm-k8s:1.0.1"
+	
+18. View the PODs (Deleted old pods and Created 3 new pods)
+
+	kubectl get pods
+	
+19. Set ENVIRONMENT variable and apply into the Deployment
+
+	kubectl set env deployment/user-ms-deployment SPRING_PROFILES_ACTIVE=test LOG_LEVEL=DEBUG
+	
+	Note: Using this step, deployment add ANNOTATE automatically using the last time message.
+	
+20. Verify all the pods environment variables
+
+	kubectl set env pods --all --list
+	
+21. Update the default-message ANNOTATE for the last rollout
+
+	kubectl annotate deployment/user-ms-deployment kubernetes.io/change-cause="Set environment variables SPRING_PROFILES_ACTIVE=test, LOG_LEVEL=DEBUG"
+	
+22. Remove a specific ENVIRONMENT variable
+
+	kubectl set env deployment/user-ms-deployment LOG_LEVEL-
+	
+	kubectl annotate deployment/user-ms-deployment kubernetes.io/change-cause="Removed environment variable LOG_LEVEL"
+	
+23. ROLLOUT previous revision deployment
+
+	kubectl rollout undo deployment/user-ms-deployment
+	
+	kubectl annotate deployment/user-ms-deployment kubernetes.io/change-cause="LOG_LEVEL environment variable back to deployment/pods"
+	
+24. ROLLOUT to a specific revision deployment
+
+	kubectl rollout undo deployment/user-ms-deployment --to-revision=2
+	
+	kubectl rollout status deployment/user-ms-deployment
+	
+25. SCALE-UP  / SCALE-DOWN Replicas
+
+	kubectl scale deployment/user-ms-deployment --replicas=1
+	
+	or 
+	
+	kubectl scale deployment/user-ms-deployment --replicas=5
+	
+26. View all PODs log
+
+	kubectl logs -f deployment/user-ms-deployment --all-pods --max-log-requests=10
+
+27. Get node/container stats without Metrics Server
+
+	docker stats
+	
+	or skip to step 28 (kubectl top)
+
+28. Kubernetes way of getting Metrics using server
+
+	kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+	
+	Set-Content -Path patch.json -Value '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]' -Encoding ascii
+	kubectl patch deployment metrics-server -n kube-system --type=json --patch-file patch.json
+
+	wait about a minute, then
+
+	kubectl -n kube-system get pods -l k8s-app=metrics-server
+	kubectl top pods -l app=user-ms-deployment --sort-by=memory
+	kubectl top pods -l app=user-ms-deployment --sort-by=cpu
+	kubectl top nodes
+	kubectl top pods
+
+29. Get API versions in Kubernetes for all types of resources
+
+	kubectl api-versions
+
+30. Pod creation YML file with property when there is any changes in it -> imagePullPolicy {Always, IfNotPresent, Never}
+    Always - if there is a change in the image then update the pod
+	IfNotPresent - 
+	Never - Don't revise the pods image eventhough a revised image is available
+
+31. Check the POD size (CPU/RAM) existing limit
+
+	kubectl get deployment user-ms-deployment -o jsonpath="{range .spec.template.spec.containers[*]}{.name}{'\n'}CPU request: {.resources.requests.cpu}{'\n'}CPU limit: {.resources.limits.cpu}{'\n'}{end}"
+
+	or
+
+	kubectl get pods -l app=user-ms-deployment -o custom-columns="POD:.metadata.name,CPU_REQ:.spec.containers[*].resources.requests.cpu,CPU_LIM:.spec.containers[*].resources.limits.cpu"
+
+32. Set/Reset the POD CPU limit
+
+	kubectl set resources deployment/user-ms-deployment -c=users-ws-kubeadm-k8s --requests=cpu=100m --limits=cpu=250m
+
+33. View all the Deployment related ENVIRONMENT variables
+
+	kubectl exec -it deploy/user-ms-deployment -- env
+
+34. Forcefully route the traffic to a specific pod
+
+	kubectl get pods
+	kubectl port-forward pod/<pod-name> 8082:8082
+
+35. Cleanup / Destroy (pods, deployment, service, then cluster)
+
+	kubectl get all
+
+	kubectl delete service users-ms-service
+	kubectl delete deployment user-ms-deployment
+
+	kubectl delete -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+	Do not delete service/kubernetes (cluster API).
+
+36. Reset / recreate empty kubeadm cluster:
+
+	docker desktop kubernetes reset-cluster
+
+	or Docker Desktop -> Kubernetes -> Stop cluster
+
+	kubectl get nodes
+	kubectl get pods
+	kubectl get svc
